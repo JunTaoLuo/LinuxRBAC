@@ -1,9 +1,8 @@
 # Instructions for testing RBAC support for Linux in .NET 5 preview 6
 
 1. Install .NET 5 preview 6 SDK
-   1. Follow the instructions at https://github.com/dotnet/installer#installers-and-binaries. Key steps are:
-   2. Download the sdk tar.gz at https://aka.ms/dotnet/net5/preview6/Sdk/dotnet-sdk-linux-x64.tar.gz and extract to a local directory. Add this directory to your PATH.
-   3. Add dotnet5 feed to your NuGet.config. You may need to add a NuGet.config file to your project directory if it doesn't exist. For example:
+   1. Download the sdk tar.gz at https://dotnetcli.azureedge.net/dotnet/Sdk/5.0.100-preview.6.20306.2/dotnet-sdk-5.0.100-preview.6.20306.2-linux-x64.tar.gz and extract to a local directory. Add this directory to your PATH.
+   2. Add dotnet5 feed to your NuGet.config. You may need to add a NuGet.config file to your project directory if it doesn't exist. For example:
 ```xml
 <configuration>
   <packageSources>
