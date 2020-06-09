@@ -37,7 +37,7 @@ namespace Microsoft.AspNetCore.Authentication.Negotiate
             {
                 if (searchResponse.Entries.Count > 1)
                 {
-                    logger.LogInformation($"More than one response received for query: {filter} with distinguished name: {distinguishedName}");
+                    logger.LogWarning($"More than one response received for query: {filter} with distinguished name: {distinguishedName}");
                 }
 
                 var userFound = searchResponse.Entries[0]; //Get the object that was found on ldap
@@ -76,7 +76,7 @@ namespace Microsoft.AspNetCore.Authentication.Negotiate
             {
                 if (searchResponse.Entries.Count > 1)
                 {
-                    logger.LogInformation($"More than one response received for query: {filter} with distinguished name: {searchDN}");
+                    logger.LogWarning($"More than one response received for query: {filter} with distinguished name: {searchDN}");
                 }
 
                 var group = searchResponse.Entries[0]; //Get the object that was found on ldap
