@@ -10,38 +10,54 @@ using System.Threading.Tasks;
 
 namespace Microsoft.AspNetCore.Authentication.Negotiate
 {
-    public static class LinuxAdapter
+    public class LinuxAdapter
     {
+        private readonly string _distinguishedName;
+        private readonly LdapConnection _connection;
+
+        public LinuxAdapter(string machineAccount, string machinePassword)
+        {
+            if (string.IsNullOrEmpty(machineAccount))
+            {
+                throw new ArgumentNullException(nameof(machineAccount));
+            }
+            if (string.IsNullOrEmpty(machinePassword))
+            {
+                throw new ArgumentNullException(nameof(machinePassword));
+            }
+
+            var domain = machineAccount.Substring(machineAccount.IndexOf('@') + 1);
+            _distinguishedName = domain.Split('.').Select(name => $"dc={name}").Aggregate((a, b) => $"{a},{b}");
+
+            LdapDirectoryIdentifier di = new LdapDirectoryIdentifier(server: domain, fullyQualifiedDnsHostName: true, connectionless: false);
+            NetworkCredential credential = new NetworkCredential(machineAccount, machinePassword);
+            _connection = new LdapConnection(di, credential);
+            _connection.SessionOptions.ProtocolVersion = 3; //Setting LDAP Protocol to latest version
+            _connection.Bind(); // This line actually makes the connection.
+            _connection.Timeout = TimeSpan.FromMinutes(1);
+        }
+
         // example: machineAccount = "user@DOMAIN.com" machinePassword = "***"
-        public static Task OnAuthenticated(AuthenticatedContext context, string machineAccount, string machinePassword, bool resolveNestedGroups = true)
+        public Task OnAuthenticated(AuthenticatedContext context, bool resolveNestedGroups = true)
         {
             var loggerFactory = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>();
             var logger = loggerFactory.CreateLogger("LinuxAdapter");
 
-            var domain = machineAccount.Substring(machineAccount.IndexOf('@') + 1);
-            var distinguishedName = domain.Split('.').Select(name => $"dc={name}").Aggregate((a, b) => $"{a},{b}");
             var user = context.Principal.Identity.Name;
             var userAccountName = user.Substring(0, user.IndexOf('@'));
 
-            LdapDirectoryIdentifier di = new LdapDirectoryIdentifier(server: domain, fullyQualifiedDnsHostName: true, connectionless: false);
-            NetworkCredential credential = new NetworkCredential(machineAccount, machinePassword);
-            using LdapConnection connection = new LdapConnection(di, credential);
-            connection.SessionOptions.ProtocolVersion = 3; //Setting LDAP Protocol to latest version
-            connection.Bind(); // This line actually makes the connection.
-            connection.Timeout = TimeSpan.FromMinutes(1);
             string filter = $"(&(objectClass=user)(sAMAccountName={userAccountName}))"; // This is using ldap search query language, it is looking on the server for someUser
-            SearchRequest searchRequest = new SearchRequest(distinguishedName, filter, SearchScope.Subtree, null);
-            SearchResponse searchResponse = (SearchResponse)connection.SendRequest(searchRequest);
+            SearchRequest searchRequest = new SearchRequest(_distinguishedName, filter, SearchScope.Subtree, null);
+            SearchResponse searchResponse = (SearchResponse)_connection.SendRequest(searchRequest);
 
             if (searchResponse.Entries.Count > 0)
             {
                 if (searchResponse.Entries.Count > 1)
                 {
-                    logger.LogWarning($"More than one response received for query: {filter} with distinguished name: {distinguishedName}");
+                    logger.LogWarning($"More than one response received for query: {filter} with distinguished name: {_distinguishedName}");
                 }
 
                 var userFound = searchResponse.Entries[0]; //Get the object that was found on ldap
-                string name = userFound.DistinguishedName;
                 var memberof = userFound.Attributes["memberof"]; // You can access ldap Attributes with Attributes property
 
                 var claimsIdentity = context.Principal.Identity as ClaimsIdentity;
@@ -54,7 +70,7 @@ namespace Microsoft.AspNetCore.Authentication.Negotiate
 
                     if (resolveNestedGroups)
                     {
-                        GetNestedGroups(connection, claimsIdentity, distinguishedName, groupCN, logger);
+                        GetNestedGroups(claimsIdentity, groupCN, logger);
                     }
                     else
                     {
@@ -66,17 +82,17 @@ namespace Microsoft.AspNetCore.Authentication.Negotiate
             return Task.CompletedTask;
         }
 
-        private static void GetNestedGroups(LdapConnection connection, ClaimsIdentity principal, string searchDN, string groupCN, ILogger logger)
+        private void GetNestedGroups(ClaimsIdentity principal, string groupCN, ILogger logger)
         {
             string filter = $"(&(objectClass=group)(sAMAccountName={groupCN}))"; // This is using ldap search query language, it is looking on the server for someUser
-            SearchRequest searchRequest = new SearchRequest(searchDN, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, null);
-            SearchResponse searchResponse = (SearchResponse)connection.SendRequest(searchRequest);
+            SearchRequest searchRequest = new SearchRequest(_distinguishedName, filter, System.DirectoryServices.Protocols.SearchScope.Subtree, null);
+            SearchResponse searchResponse = (SearchResponse)_connection.SendRequest(searchRequest);
 
             if (searchResponse.Entries.Count > 0)
             {
                 if (searchResponse.Entries.Count > 1)
                 {
-                    logger.LogWarning($"More than one response received for query: {filter} with distinguished name: {searchDN}");
+                    logger.LogWarning($"More than one response received for query: {filter} with distinguished name: {_distinguishedName}");
                 }
 
                 var group = searchResponse.Entries[0]; //Get the object that was found on ldap
@@ -90,7 +106,7 @@ namespace Microsoft.AspNetCore.Authentication.Negotiate
                     {
                         var groupDN = $"{Encoding.UTF8.GetString((byte[])member)}";
                         var nestedGroupCN = groupDN.Split(',')[0].Substring("CN=".Length);
-                        GetNestedGroups(connection, principal, searchDN, nestedGroupCN, logger);
+                        GetNestedGroups(principal, nestedGroupCN, logger);
                     }
                 }
             }

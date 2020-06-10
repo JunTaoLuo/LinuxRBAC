@@ -20,10 +20,11 @@
    3. Add the file [LinuxAdapter.cs](https://github.com/JunTaoLuo/LinuxRBAC/blob/master/LinuxAdapter.cs) to your project
    4. Modify the `ConfigureServices` method to the following:
 ```C#
+var adapter = new LinuxAdapter("user@DOMAIN.net", "<Password>");
 services.AddAuthentication(NegotiateDefaults.AuthenticationScheme)
     .AddNegotiate(options => options.Events = new NegotiateEvents()
     {
-        OnAuthenticated = context => LinuxAdapter.OnAuthenticated(context, "user@DOMAIN.net", "<Password>")
+        OnAuthenticated = context => adapter.OnAuthenticated(context)
     });
 ```
    5. Run the project and verify roles are populated via `User.IsInRole("<Role>")`.
