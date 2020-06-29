@@ -15,29 +15,23 @@ namespace Microsoft.AspNetCore.Authentication.Negotiate
         private readonly string _distinguishedName;
         private readonly LdapConnection _connection;
 
-        public LinuxAdapter(string machineAccount, string machinePassword)
+        // example: domain = "DOMAIN.com"
+        public LinuxAdapter(string domain)
         {
-            if (string.IsNullOrEmpty(machineAccount))
+            if (string.IsNullOrEmpty(domain))
             {
-                throw new ArgumentNullException(nameof(machineAccount));
-            }
-            if (string.IsNullOrEmpty(machinePassword))
-            {
-                throw new ArgumentNullException(nameof(machinePassword));
+                throw new ArgumentNullException(nameof(domain));
             }
 
-            var domain = machineAccount.Substring(machineAccount.IndexOf('@') + 1);
             _distinguishedName = domain.Split('.').Select(name => $"dc={name}").Aggregate((a, b) => $"{a},{b}");
 
             LdapDirectoryIdentifier di = new LdapDirectoryIdentifier(server: domain, fullyQualifiedDnsHostName: true, connectionless: false);
-            NetworkCredential credential = new NetworkCredential(machineAccount, machinePassword);
-            _connection = new LdapConnection(di, credential);
+            _connection = new LdapConnection(di);
             _connection.SessionOptions.ProtocolVersion = 3; //Setting LDAP Protocol to latest version
-            _connection.Bind(); // This line actually makes the connection.
             _connection.Timeout = TimeSpan.FromMinutes(1);
+            _connection.Bind(); // This line actually makes the connection.
         }
 
-        // example: machineAccount = "user@DOMAIN.com" machinePassword = "***"
         public Task OnAuthenticated(AuthenticatedContext context, bool resolveNestedGroups = true)
         {
             var loggerFactory = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>();
@@ -77,6 +71,10 @@ namespace Microsoft.AspNetCore.Authentication.Negotiate
                         AddRole(claimsIdentity, groupCN);
                     }
                 }
+            }
+            else
+            {
+                logger.LogWarning($"No response received for query: {filter} with distinguished name: {_distinguishedName}");
             }
 
             return Task.CompletedTask;
